@@ -54,6 +54,14 @@
     .memo-footer { display:flex; justify-content:space-between; align-items:center; border-top:1px dashed #dce4d7; padding-top:14px; color:#9aa69a; font-size:13px; }
     .save { border:0; border-radius:12px; padding:12px 18px; color:#fff; background:var(--deep); box-shadow:0 4px 10px #2d684433; }
     .save:hover { background:#215635; }
+    .memo-list-wrap { grid-column:1 / -1; margin-top:20px; }
+    .memo-list-wrap h3 { margin:0 0 14px; font-size:16px; font-family:"Nanum Myeongjo",serif; }
+    .memo-list { display:flex; flex-direction:column; gap:10px; max-height:320px; overflow-y:auto; }
+    .memo-list-item { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; background:#fff; border:1px solid #ebe5d9; border-radius:12px; padding:12px 14px; }
+    .memo-list-item .memo-text-wrap p { margin:0 0 4px; font-size:14px; line-height:1.5; white-space:pre-wrap; }
+    .memo-list-item .memo-text-wrap small { color:#9aa69a; font-size:12px; }
+    .memo-list-actions { display:flex; gap:6px; flex-shrink:0; }
+    .memo-list-actions button { padding:6px 10px; font-size:12px; }
     .jar-stage { position:relative; min-height:420px; display:grid; place-items:center; }
     .jar-stage::before { content:""; width:340px; height:340px; position:absolute; background:#e4f1dc; border-radius:50%; opacity:.7; }
     .jar { width:230px; height:286px; position:relative; z-index:1; filter:drop-shadow(0 17px 12px #63836335); }
@@ -93,6 +101,7 @@
     @keyframes appear { from { opacity:0; transform:translateY(18px) rotate(-2deg); } to { opacity:1; transform:none; } }
     .result p { white-space:pre-wrap; line-height:1.8; margin:0 0 10px; font-size:17px; }
     .result .author { color:#9aa69a; font-size:13px; margin:0 0 12px; }
+    .result-date { color:#b7c0b6; font-size:12px; text-align:right; margin:14px 0 0; }
     .tags { display:flex; flex-wrap:wrap; gap:7px; }
     .tag { color:#407a50; background:#e9f4e7; padding:4px 9px; border-radius:99px; font-size:13px; }
     .message { color:#c46451; font-size:14px; min-height:18px; margin:8px 0 0; }
@@ -152,7 +161,7 @@
             <div class="scope-row"><span>담을 곳</span><select id="writeScope"><option value="private">내 유리병 (비공개)</option></select></div>
             <div class="memo-card" id="memoCard">
               <textarea id="memo" maxlength="500" placeholder="오늘 어떤 순간이 행복했나요?&#10;#친구 #가족처럼 태그도 붙여보세요."></textarea>
-              <div class="memo-footer"><span id="count">0 / 500</span><button class="save" id="save">네잎클로버로 접기</button></div>
+              <div class="memo-footer"><span id="count">0 / 500</span><span><button class="btn-ghost" id="cancelEdit" type="button" hidden>취소</button> <button class="save" id="save">네잎클로버로 접기</button></span></div>
               <span class="clover folding-clover" id="foldingClover" aria-hidden="true"></span>
             </div>
             <p class="message" id="saveMessage" aria-live="polite"></p>
@@ -160,6 +169,10 @@
           <div class="jar-stage">
             <div class="jar" aria-label="행복 메모가 든 유리병"><div class="lid"></div><div class="glass"><div class="clovers" id="writeClovers"></div></div></div>
             <p class="jar-note"><span id="memoTotal">0</span>개의 행복이 차곡차곡 쌓였어요</p>
+          </div>
+          <div class="memo-list-wrap">
+            <h3>내가 담은 행복</h3>
+            <div class="memo-list" id="memoList"></div>
           </div>
         </div>
       </section>
@@ -177,7 +190,7 @@
           <div class="jar draw-jar" id="drawJar"><div class="lid"></div><div class="glass"><div class="clovers" id="drawClovers"></div></div><span class="clover picked-clover" id="pickedClover" aria-hidden="true"></span></div>
           <button class="draw" id="drawButton">유리병 흔들기</button>
           <p class="empty" id="drawCount"></p>
-          <div class="result" id="result" hidden><p id="resultText"></p><p class="author" id="resultAuthor"></p><div class="tags" id="resultTags"></div></div>
+          <div class="result" id="result" hidden><p id="resultText"></p><p class="author" id="resultAuthor"></p><div class="tags" id="resultTags"></div><p class="result-date" id="resultDate"></p></div>
         </div>
       </section>
       <section id="rooms" class="screen">
@@ -214,7 +227,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-    import { getFirestore, collection, doc, addDoc, getDocs, setDoc, updateDoc, query, where, orderBy, onSnapshot, serverTimestamp, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+    import { getFirestore, collection, doc, addDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
     // TODO: 본인의 Firebase 프로젝트 설정값으로 교체하세요. (Firebase 콘솔 > 프로젝트 설정 > 일반 > 내 앱)
     const firebaseConfig = {
@@ -236,6 +249,14 @@
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const tagsFromText = text => [...text.matchAll(/(^|\s)#([\w가-힣]+)/g)].map(m => m[2]);
     const stripTags = text => text.replace(/(^|\s)#[\w가-힣]+/g, '').trim();
+    function formatDate(ts) {
+      const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+      if (!d) return '';
+      const yy = String(d.getFullYear()).slice(-2);
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yy}.${mm}.${dd}`;
+    }
 
     let currentUser = null;
     let personalMemos = [];
@@ -243,6 +264,7 @@
     let unsubPersonal = null;
     let unsubRooms = null;
     let openShareRoomId = null;
+    let editingMemoId = null;
 
     const pixelPattern=[[1,0],[2,0],[4,0],[5,0],[0,1],[1,1],[2,1],[4,1],[5,1],[6,1],[1,2],[2,2],[3,2],[4,2],[5,2],[1,3],[2,3],[3,3],[4,3],[5,3],[0,4],[1,4],[2,4],[4,4],[5,4],[6,4],[1,5],[2,5],[4,5],[5,5]];
     function fillClover(c) { if(c.children.length) return c; pixelPattern.forEach(([x,y])=>{const dot=document.createElement('i');dot.className='dot';dot.style.left=`${x*8}px`;dot.style.top=`${y*8}px`;c.append(dot);}); return c; }
@@ -309,7 +331,9 @@
           ? personalMemos.map(m => {
               const already = (m.sharedRooms||[]).includes(r.id);
               const preview = esc(stripTags(m.text||'')).slice(0,80);
-              const sub = already ? '이미 공유됨' : (m.tags||[]).map(t=>'#'+esc(t)).join(' ');
+              const tagText = (m.tags||[]).map(t=>'#'+esc(t)).join(' ');
+              const dateText = esc(formatDate(m.createdAt));
+              const sub = [already ? '이미 공유됨' : tagText, dateText].filter(Boolean).join(' · ');
               return `<label class="share-item ${already?'shared':''}"><input type="checkbox" value="${m.id}" ${already?'disabled checked':''} /><span><p>${preview}</p><small>${sub}</small></span></label>`;
             }).join('')
           : `<p class="empty-note">공유할 개인 메모가 아직 없어요.</p>`;
@@ -329,7 +353,60 @@
         </div>`;
       }).join('');
     }
-    function refreshAll() { refreshWriteScopeOptions(); refreshDrawSourceOptions(); refreshWrite(); refreshDraw(); refreshRooms(); }
+    function refreshMemoList() {
+      const host = $('#memoList');
+      if (!personalMemos.length) { host.innerHTML = `<p class="empty-note">아직 담은 행복이 없어요.</p>`; return; }
+      host.innerHTML = personalMemos.map(m => {
+        const preview = esc(stripTags(m.text||'')).slice(0,60);
+        const tagText = (m.tags||[]).map(t=>'#'+esc(t)).join(' ');
+        const dateText = esc(formatDate(m.createdAt));
+        const sub = [tagText, dateText].filter(Boolean).join(' · ');
+        return `<div class="memo-list-item">
+          <div class="memo-text-wrap"><p>${preview}</p><small>${sub}</small></div>
+          <div class="memo-list-actions">
+            <button type="button" class="btn-ghost" data-action="edit-memo" data-id="${m.id}">수정</button>
+            <button type="button" class="btn-ghost" data-action="delete-memo" data-id="${m.id}">삭제</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    function refreshAll() { refreshWriteScopeOptions(); refreshDrawSourceOptions(); refreshWrite(); refreshDraw(); refreshRooms(); refreshMemoList(); }
+
+    function startEditMemo(memo) {
+      editingMemoId = memo.id;
+      $('#memo').value = memo.text || '';
+      $('#count').textContent = `${(memo.text||'').length} / 500`;
+      $('#writeScope').value = 'private';
+      $('#writeScope').disabled = true;
+      $('#save').textContent = '수정 완료';
+      $('#cancelEdit').hidden = false;
+      $('#saveMessage').textContent = '메모를 수정하는 중이에요. 저장하면 반영돼요.';
+      $('#memo').focus();
+    }
+    function cancelEditMemo() {
+      editingMemoId = null;
+      $('#memo').value = ''; $('#count').textContent = '0 / 500';
+      $('#writeScope').disabled = false;
+      $('#save').textContent = '네잎클로버로 접기';
+      $('#cancelEdit').hidden = true;
+      $('#saveMessage').textContent = '';
+    }
+    $('#cancelEdit').addEventListener('click', cancelEditMemo);
+
+    $('#memoList').addEventListener('click', async e => {
+      const btn = e.target.closest('button[data-action]'); if (!btn || !currentUser) return;
+      const id = btn.dataset.id;
+      const memo = personalMemos.find(m => m.id === id); if (!memo) return;
+      if (btn.dataset.action === 'edit-memo') {
+        startEditMemo(memo);
+      } else if (btn.dataset.action === 'delete-memo') {
+        if (!confirm('이 메모를 삭제할까요? 되돌릴 수 없어요.')) return;
+        try {
+          await deleteDoc(doc(db,'users',currentUser.uid,'memos',id));
+          if (editingMemoId === id) cancelEditMemo();
+        } catch (err) { console.error(err); $('#saveMessage').textContent = '삭제에 실패했어요. 잠시 후 다시 시도해주세요.'; }
+      }
+    });
 
     $('#memo').addEventListener('input', e => $('#count').textContent = `${e.target.value.length} / 500`);
     $('#writeScope').addEventListener('change', refreshWrite);
@@ -340,14 +417,21 @@
       const text = $('#memo').value.trim();
       const message = $('#saveMessage');
       if (!text) { message.textContent = '행복했던 순간을 먼저 적어주세요.'; return; }
-      const scope = $('#writeScope').value || 'private';
+      const scope = editingMemoId ? 'private' : ($('#writeScope').value || 'private');
       const tags = tagsFromText(text);
       const card = $('#memoCard'), clover = $('#foldingClover');
       card.classList.remove('folding'); clover.classList.remove('show'); void card.offsetWidth;
       card.classList.add('folding'); clover.classList.add('show');
       setTimeout(async () => {
         try {
-          if (scope === 'private') {
+          if (editingMemoId) {
+            await updateDoc(doc(db,'users',currentUser.uid,'memos',editingMemoId), { text, tags });
+            message.textContent = '메모를 수정했어요.';
+            editingMemoId = null;
+            $('#writeScope').disabled = false;
+            $('#save').textContent = '네잎클로버로 접기';
+            $('#cancelEdit').hidden = true;
+          } else if (scope === 'private') {
             await addDoc(collection(db,'users',currentUser.uid,'memos'), { text, tags, createdAt: serverTimestamp(), sharedRooms: [] });
             message.textContent = '네잎클로버로 접어 내 유리병에 담았어요.';
           } else {
@@ -389,6 +473,7 @@
         $('#resultAuthor').textContent = memo.authorName ? `- ${memo.authorName}` : '';
         const tagsHost = $('#resultTags');
         tagsHost.replaceChildren(...(memo.tags||[]).map(t => { const s=document.createElement('span'); s.className='tag'; s.textContent='#'+t; return s; }));
+        $('#resultDate').textContent = formatDate(memo.createdAt);
         $('#result').hidden = false;
       }, 1600);
     });
